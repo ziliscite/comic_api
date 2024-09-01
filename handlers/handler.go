@@ -14,6 +14,7 @@ type Handler struct {
 	Queries    *database.Queries
 	Logger     *middlewares.Logger
 	ListenAddr string
+	JWTSecret  string
 }
 
 func NewHandler() *Handler {
@@ -24,8 +25,6 @@ func NewHandler() *Handler {
 		log.Fatal(err)
 	}
 
-	// I just realized this ctx thing is probably for timeout or something
-	// Like, taking too long, return error
 	err = db.Ping(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -39,5 +38,6 @@ func NewHandler() *Handler {
 		Queries:    queries,
 		Logger:     logger,
 		ListenAddr: os.Getenv("LISTEN_ADDR"),
+		JWTSecret:  os.Getenv("JWT_SECRET"),
 	}
 }

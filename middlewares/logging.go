@@ -46,8 +46,6 @@ type wrappedResponseWriter struct {
 
 func (w *wrappedResponseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
-
-	// This
 	w.ResponseWriter.WriteHeader(statusCode)
 }
 
@@ -129,6 +127,7 @@ func EnsureAdmin(next http.Handler) http.Handler {
 			w.Write([]byte(http.StatusText(http.StatusUnauthorized)))
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
 }

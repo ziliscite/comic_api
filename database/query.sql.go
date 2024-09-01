@@ -608,6 +608,88 @@ func (q *Queries) GetGenresByComicId(ctx context.Context, comicID int32) ([]*Gen
 	return items, nil
 }
 
+const loginWithEmail = `-- name: LoginWithEmail :one
+SELECT
+    user_id, username, email, password, first_name, last_name, date_of_birth, role
+FROM
+    users
+WHERE
+    users.email = $1
+`
+
+type LoginWithEmailRow struct {
+	UserID      int32       `json:"user_id"`
+	Username    string      `json:"username"`
+	Email       string      `json:"email"`
+	Password    string      `json:"password"`
+	FirstName   *string     `json:"first_name"`
+	LastName    *string     `json:"last_name"`
+	DateOfBirth pgtype.Date `json:"date_of_birth"`
+	Role        UserRole    `json:"role"`
+}
+
+// Login User
+func (q *Queries) LoginWithEmail(ctx context.Context, email string) (*LoginWithEmailRow, error) {
+	row := q.db.QueryRow(ctx, loginWithEmail, email)
+	var i LoginWithEmailRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.DateOfBirth,
+		&i.Role,
+	)
+	return &i, err
+}
+
+const registerUser = `-- name: RegisterUser :one
+INSERT INTO users (
+    username, email, password, first_name, last_name, date_of_birth, role
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING user_id, username, email, password, first_name, last_name, date_of_birth, role, created_at, updated_at
+`
+
+type RegisterUserParams struct {
+	Username    string      `json:"username"`
+	Email       string      `json:"email"`
+	Password    string      `json:"password"`
+	FirstName   *string     `json:"first_name"`
+	LastName    *string     `json:"last_name"`
+	DateOfBirth pgtype.Date `json:"date_of_birth"`
+	Role        UserRole    `json:"role"`
+}
+
+// Register User
+func (q *Queries) RegisterUser(ctx context.Context, arg RegisterUserParams) (*User, error) {
+	row := q.db.QueryRow(ctx, registerUser,
+		arg.Username,
+		arg.Email,
+		arg.Password,
+		arg.FirstName,
+		arg.LastName,
+		arg.DateOfBirth,
+		arg.Role,
+	)
+	var i User
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.DateOfBirth,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const removeGenreFromComic = `-- name: RemoveGenreFromComic :exec
 DELETE FROM comic_genres
 WHERE comic_id = $1 AND genre_id = $2

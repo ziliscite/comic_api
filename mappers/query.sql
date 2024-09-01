@@ -207,3 +207,20 @@ WHERE
     comics.title ILIKE '%' || $1 || '%'
 ORDER BY
     comics.upload_date DESC;
+
+-- Register User
+-- name: RegisterUser :one
+INSERT INTO users (
+    username, email, password, first_name, last_name, date_of_birth, role
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING *;
+
+-- Login User
+-- name: LoginWithEmail :one
+SELECT
+    user_id, username, email, password, first_name, last_name, date_of_birth, role
+FROM
+    users
+WHERE
+    users.email = $1;
