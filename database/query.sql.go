@@ -31,6 +31,26 @@ func (q *Queries) AddGenreToComic(ctx context.Context, arg AddGenreToComicParams
 	return err
 }
 
+const bookmarkComic = `-- name: BookmarkComic :exec
+INSERT INTO bookmark (
+    user_id,
+    comic_id
+) VALUES (
+     $1, $2
+)
+`
+
+type BookmarkComicParams struct {
+	UserID  int32 `json:"user_id"`
+	ComicID int32 `json:"comic_id"`
+}
+
+// Bookmark a comic
+func (q *Queries) BookmarkComic(ctx context.Context, arg BookmarkComicParams) error {
+	_, err := q.db.Exec(ctx, bookmarkComic, arg.UserID, arg.ComicID)
+	return err
+}
+
 const createAuthor = `-- name: CreateAuthor :one
 
 INSERT INTO authors (name) VALUES ($1) RETURNING id, name
@@ -688,6 +708,22 @@ func (q *Queries) RegisterUser(ctx context.Context, arg RegisterUserParams) (*Us
 		&i.UpdatedAt,
 	)
 	return &i, err
+}
+
+const removeComicFromBookmark = `-- name: RemoveComicFromBookmark :exec
+DELETE FROM bookmark
+WHERE user_id = $1 AND comic_id = $2
+`
+
+type RemoveComicFromBookmarkParams struct {
+	UserID  int32 `json:"user_id"`
+	ComicID int32 `json:"comic_id"`
+}
+
+// Remove a comic from user's bookmark
+func (q *Queries) RemoveComicFromBookmark(ctx context.Context, arg RemoveComicFromBookmarkParams) error {
+	_, err := q.db.Exec(ctx, removeComicFromBookmark, arg.UserID, arg.ComicID)
+	return err
 }
 
 const removeGenreFromComic = `-- name: RemoveGenreFromComic :exec

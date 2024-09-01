@@ -224,3 +224,17 @@ FROM
     users
 WHERE
     users.email = $1;
+
+-- Bookmark a comic
+-- name: BookmarkComic :exec
+INSERT INTO bookmark (
+    user_id,
+    comic_id
+) VALUES (
+     $1, $2
+);
+
+-- Remove a comic from user's bookmark
+-- name: RemoveComicFromBookmark :exec
+DELETE FROM bookmark
+WHERE user_id = $1 AND comic_id = $2;

@@ -5,7 +5,7 @@ import (
 	"bookstore/helpers"
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"github.com/gosimple/slug"
 	"net/http"
 )
@@ -61,7 +61,7 @@ func (h *Handler) CreateComic(w http.ResponseWriter, r *http.Request) (int, erro
 	err := json.NewDecoder(r.Body).Decode(&comicParams)
 	if err != nil {
 		h.Logger.Printf("Error parsing request body: %s", err)
-		return http.StatusBadRequest, fmt.Errorf("invalid request body")
+		return http.StatusBadRequest, errors.New("invalid request body")
 	}
 
 	comicSlug := slug.Make(comicParams.Title)
@@ -73,7 +73,7 @@ func (h *Handler) CreateComic(w http.ResponseWriter, r *http.Request) (int, erro
 	comic, err := h.Queries.CreateComic(ctx, comicParams)
 	if err != nil {
 		h.Logger.Printf("Error creating comic: %s", err)
-		return http.StatusBadRequest, fmt.Errorf("error creating comic")
+		return http.StatusBadRequest, errors.New("error creating comic")
 	}
 
 	helpers.RespondWithJSON(w, http.StatusCreated, comic)

@@ -38,6 +38,8 @@ func main() {
 	// The creation handler (POST request) should be authorized by either admin or moderator
 	adminRouter.Handle("POST /comics", helpers.ServeHandler(handler.CreateComic))
 	router.Handle("GET /comics", helpers.ServeHandler(handler.GetComics))
+
+	// This will also return all of its genres & chapters
 	router.Handle("GET /comics/{comic_slug}", helpers.ServeHandler(handler.GetComicBySlug))
 
 	// Alas, I input all the genres by hand
@@ -51,13 +53,18 @@ func main() {
 	router.Handle("POST /register", helpers.ServeHandler(handler.RegisterUser))
 	router.Handle("POST /login", helpers.ServeHandler(handler.Login))
 
+	userRouter := http.NewServeMux()
+	userRouter.Handle("POST /bookmark/{comic_slug}", helpers.ServeHandler(handler.AddComicBookmark))
+
 	adminMiddleware := middlewares.CreateStack(
 		// Yeah, the other way around. This one's correct
 		authenticator.AuthenticateMiddleware,
 		authenticator.EnsureAdminMiddleware,
 	)
 
-	router.Handle("/", adminMiddleware(adminRouter))
+	router.Handle("/admin/", adminMiddleware(http.StripPrefix("/admin", adminRouter)))
+
+	router.Handle("/users/", authenticator.AuthenticateMiddleware(http.StripPrefix("/users", userRouter)))
 
 	server := http.Server{
 		Addr:    handler.ListenAddr,

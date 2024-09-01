@@ -68,6 +68,13 @@ CREATE TABLE users (
     updated_at TIMESTAMP DEFAULT NOW() -- Timestamp for the last update
 );
 
+-- Join table for comics that is being bookmarked by users
+CREATE TABLE bookmark (
+    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+    comic_id INT REFERENCES comics(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, comic_id)
+);
+
 CREATE TABLE sessions (
     session_id SERIAL PRIMARY KEY,  -- Unique identifier for each session
     user_id INT REFERENCES users(user_id) ON DELETE CASCADE,  -- Foreign key referencing the user_id in the users table

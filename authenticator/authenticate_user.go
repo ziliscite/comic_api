@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -61,17 +60,14 @@ func ValidateToken(tokenString string) (*jwt.Token, *handlers.CustomClaims, erro
 	})
 
 	if err != nil {
-		log.Printf("Invalid token: %s", err)
 		return nil, nil, fmt.Errorf("invalid token")
 	}
 
 	if issuer, err := token.Claims.GetIssuer(); err != nil || issuer != os.Getenv("ISSUER") {
-		log.Printf("Invalid issuer: %s", err)
 		return nil, nil, fmt.Errorf("invalid token")
 	}
 
 	if !token.Valid {
-		log.Printf("Invalid token")
 		return nil, nil, fmt.Errorf("invalid token")
 	}
 

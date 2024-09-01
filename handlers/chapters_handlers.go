@@ -5,7 +5,7 @@ import (
 	"bookstore/helpers"
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"strconv"
 )
@@ -27,13 +27,13 @@ func (h *Handler) CreateChapter(w http.ResponseWriter, r *http.Request) (int, er
 	err = json.NewDecoder(r.Body).Decode(&chapterParams)
 	if err != nil {
 		h.Logger.Printf("Error parsing request body: %s", err)
-		return http.StatusBadRequest, fmt.Errorf("invalid request body")
+		return http.StatusBadRequest, errors.New("invalid request body")
 	}
 
 	chapter, err := h.Queries.CreateChapter(ctx, chapterParams)
 	if err != nil {
 		h.Logger.Printf("Error creating chapter: %s", err)
-		return http.StatusBadRequest, fmt.Errorf("error creating chapter")
+		return http.StatusBadRequest, errors.New("error creating chapter")
 	}
 
 	helpers.RespondWithJSON(w, http.StatusCreated, chapter)
@@ -45,7 +45,7 @@ func (h *Handler) GetChapterByNumber(w http.ResponseWriter, r *http.Request) (in
 	chapterNumber, err := strconv.Atoi(r.PathValue("chapter_number"))
 	if err != nil {
 		h.Logger.Printf("Error parsing request body: %s", err)
-		return http.StatusBadRequest, fmt.Errorf("invalid request body")
+		return http.StatusBadRequest, errors.New("invalid request body")
 	}
 
 	ctx := context.Background()
@@ -58,7 +58,7 @@ func (h *Handler) GetChapterByNumber(w http.ResponseWriter, r *http.Request) (in
 	chapterResp, err := h.Queries.GetChapterByComicSlugAndNumber(ctx, chapterReq)
 	if err != nil {
 		h.Logger.Printf("Error getting chapter: %s", err)
-		return http.StatusNotFound, fmt.Errorf("chapter is not found")
+		return http.StatusNotFound, errors.New("chapter is not found")
 	}
 
 	helpers.RespondWithJSON(w, http.StatusOK, chapterResp)

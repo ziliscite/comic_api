@@ -4,7 +4,7 @@ import (
 	"bookstore/helpers"
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
@@ -36,19 +36,19 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
 	err := json.NewDecoder(r.Body).Decode(&userReq)
 	if err != nil {
 		h.Logger.Printf("Error parsing request body: %s", err)
-		return http.StatusBadRequest, fmt.Errorf("invalid request body")
+		return http.StatusBadRequest, errors.New("invalid request body")
 	}
 
 	user, err := h.Queries.LoginWithEmail(ctx, userReq.Email)
 	if err != nil {
 		h.Logger.Printf("Error while logging in: %v", err)
-		return http.StatusUnauthorized, fmt.Errorf("email or password does not match")
+		return http.StatusUnauthorized, errors.New("email or password does not match")
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(userReq.Password))
 	if err != nil {
 		h.Logger.Printf("Password does not match: %v", err)
-		return http.StatusUnauthorized, fmt.Errorf("email or password does not match")
+		return http.StatusUnauthorized, errors.New("email or password does not match")
 	}
 
 	// Yeah, we gon use this only when we validate the auth // Nope
@@ -61,7 +61,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
 	accessToken, err := GenerateJWT(req, h.JWTSecret)
 	if err != nil {
 		h.Logger.Printf("Error generating access token: %v", err)
-		return http.StatusInternalServerError, fmt.Errorf("error generating access token")
+		return http.StatusInternalServerError, errors.New("error generating access token")
 	}
 
 	w.Header().Set("Authorization", "Bearer "+accessToken)
@@ -82,12 +82,12 @@ type CustomClaims struct {
 func GenerateJWT(r *http.Request, secret string) (string, error) {
 	role, ok := r.Context().Value(RoleKey).(string)
 	if !ok {
-		return "", fmt.Errorf("role cannot be converted to a string")
+		return "", errors.New("role cannot be converted to a string")
 	}
 
 	subject, ok := r.Context().Value(UserIDKey).(string)
 	if !ok {
-		return "", fmt.Errorf("user cannot be converted to a string")
+		return "", errors.New("user cannot be converted to a string")
 	}
 
 	claims := CustomClaims{

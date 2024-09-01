@@ -107,6 +107,11 @@ type AuthorComic struct {
 	ComicID  int32 `json:"comic_id"`
 }
 
+type Bookmark struct {
+	UserID  int32 `json:"user_id"`
+	ComicID int32 `json:"comic_id"`
+}
+
 type Chapter struct {
 	ID            int32            `json:"id"`
 	ComicID       *int32           `json:"comic_id"`

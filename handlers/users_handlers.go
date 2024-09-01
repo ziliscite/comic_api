@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
@@ -65,7 +64,7 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) (int, err
 	err := json.NewDecoder(r.Body).Decode(&userReq)
 	if err != nil {
 		h.Logger.Printf("Error parsing request body: %s", err)
-		return http.StatusBadRequest, fmt.Errorf("invalid request body")
+		return http.StatusBadRequest, errors.New("invalid request body")
 	}
 
 	err = ValidateEmail(userReq.Email)
@@ -104,17 +103,17 @@ func handleUserError(logger *middlewares.Logger, err error, email string, userna
 			switch pgErr.ConstraintName {
 			case "users_email_key":
 				logger.Printf("Email already registered: %s", email)
-				return http.StatusBadRequest, fmt.Errorf("email already registered")
+				return http.StatusBadRequest, errors.New("email already registered")
 			case "users_username_key":
 				logger.Printf("Username already registered: %s", username)
-				return http.StatusBadRequest, fmt.Errorf("username already registered")
+				return http.StatusBadRequest, errors.New("username already registered")
 			default:
 				logger.Printf("Unexpected unique constraint violation: %s", pgErr.ConstraintName)
-				return http.StatusInternalServerError, fmt.Errorf("unexpected unique constraint violation")
+				return http.StatusInternalServerError, errors.New("unexpected unique constraint violation")
 			}
 		}
 	}
 
 	logger.Printf("Non-Postgres error: %s", err)
-	return http.StatusInternalServerError, fmt.Errorf("failed to create user")
+	return http.StatusInternalServerError, errors.New("failed to create user")
 }

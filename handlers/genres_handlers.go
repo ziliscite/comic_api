@@ -4,6 +4,7 @@ import (
 	"bookstore/database"
 	"bookstore/helpers"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -45,7 +46,7 @@ func (h *Handler) AddGenreToComic(w http.ResponseWriter, r *http.Request) (int, 
 	err = h.Queries.AddGenreToComic(ctx, AddGenreResp)
 	if err != nil {
 		h.Logger.Printf("Error adding genre to comic: %s", err)
-		return http.StatusInternalServerError, fmt.Errorf("error adding genre to comic")
+		return http.StatusInternalServerError, errors.New("error adding genre to comic")
 	}
 
 	message := fmt.Sprintf("%s genre is added to %s", genre.GenreName, comic.Title)
