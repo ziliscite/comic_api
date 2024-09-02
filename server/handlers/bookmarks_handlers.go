@@ -1,9 +1,9 @@
-package handlers
+package handler
 
 import (
 	"bookstore/database"
-	"bookstore/helpers"
-	"context"
+	"bookstore/token_maker"
+	"bookstore/utils/helpers"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,7 +12,7 @@ import (
 
 func (h *Handler) AddComicBookmark(w http.ResponseWriter, r *http.Request) (int, error) {
 	// From the AuthenticateMiddleware btw
-	claims, ok := r.Context().Value(ClaimsKey).(*CustomClaims)
+	claims, ok := r.Context().Value(token_maker.ClaimsKey).(*token_maker.CustomClaims)
 	if !ok {
 		return http.StatusUnauthorized, errors.New("not authorized")
 	}
@@ -24,9 +24,7 @@ func (h *Handler) AddComicBookmark(w http.ResponseWriter, r *http.Request) (int,
 
 	comicSlug := r.PathValue("comic_slug")
 
-	ctx := context.Background()
-
-	comic, code, err := helpers.GetComicBySlugHelper(ctx, h.Queries, h.Logger, comicSlug)
+	comic, code, err := h.GetComicBySlugHelper(comicSlug)
 	if err != nil {
 		return code, err
 	}
@@ -36,9 +34,9 @@ func (h *Handler) AddComicBookmark(w http.ResponseWriter, r *http.Request) (int,
 		ComicID: comic.ID,
 	}
 
-	err = h.Queries.BookmarkComic(ctx, AddBookmarkResp)
+	err = h.Queries.BookmarkComic(h.Context, AddBookmarkResp)
 	if err != nil {
-		h.Logger.Printf("Error bookmarking comic: %s", err)
+		h.Middlewares.Printf("Error bookmarking comic: %s", err)
 		return http.StatusInternalServerError, errors.New("error bookmarking comic")
 	}
 

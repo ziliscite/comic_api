@@ -665,7 +665,7 @@ func (q *Queries) LoginWithEmail(ctx context.Context, email string) (*LoginWithE
 	return &i, err
 }
 
-const registerUser = `-- name: RegisterUser :one
+const registerUser = `-- name: Register :one
 INSERT INTO users (
     username, email, password, first_name, last_name, date_of_birth, role
 ) VALUES (

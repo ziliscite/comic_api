@@ -1,21 +1,21 @@
-package handlers
+package handler
 
 import (
 	"bookstore/database"
-	"bookstore/helpers"
-	"context"
+	"bookstore/utils/helpers"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func (h *Handler) CreateChapter(w http.ResponseWriter, r *http.Request) (int, error) {
 	comicSlug := r.PathValue("comic_slug")
 
-	ctx := context.Background()
-
-	comic, code, err := helpers.GetComicBySlugHelper(ctx, h.Queries, h.Logger, comicSlug)
+	comic, code, err := h.GetComicBySlugHelper(comicSlug)
 	if err != nil {
 		return code, err
 	}
@@ -26,13 +26,25 @@ func (h *Handler) CreateChapter(w http.ResponseWriter, r *http.Request) (int, er
 
 	err = json.NewDecoder(r.Body).Decode(&chapterParams)
 	if err != nil {
-		h.Logger.Printf("Error parsing request body: %s", err)
+		h.Middlewares.Printf("Error parsing request body: %s", err)
 		return http.StatusBadRequest, errors.New("invalid request body")
 	}
 
-	chapter, err := h.Queries.CreateChapter(ctx, chapterParams)
+	if chapterParams.Title == nil {
+		chapterParams.Title = new(string)
+		*chapterParams.Title = fmt.Sprintf("Chapter %d", chapterParams.ChapterNumber)
+	}
+
+	if !chapterParams.ReleaseDate.Valid {
+		chapterParams.ReleaseDate = pgtype.Timestamp{
+			Valid: true,
+			Time:  time.Now(),
+		}
+	}
+
+	chapter, err := h.Queries.CreateChapter(h.Context, chapterParams)
 	if err != nil {
-		h.Logger.Printf("Error creating chapter: %s", err)
+		h.Middlewares.Printf("Error creating chapter: %s", err)
 		return http.StatusBadRequest, errors.New("error creating chapter")
 	}
 
@@ -44,20 +56,18 @@ func (h *Handler) GetChapterByNumber(w http.ResponseWriter, r *http.Request) (in
 	comicSlug := r.PathValue("comic_slug")
 	chapterNumber, err := strconv.Atoi(r.PathValue("chapter_number"))
 	if err != nil {
-		h.Logger.Printf("Error parsing request body: %s", err)
+		h.Middlewares.Printf("Error parsing request body: %s", err)
 		return http.StatusBadRequest, errors.New("invalid request body")
 	}
-
-	ctx := context.Background()
 
 	chapterReq := database.GetChapterByComicSlugAndNumberParams{
 		Slug:          &comicSlug,
 		ChapterNumber: int32(chapterNumber),
 	}
 
-	chapterResp, err := h.Queries.GetChapterByComicSlugAndNumber(ctx, chapterReq)
+	chapterResp, err := h.Queries.GetChapterByComicSlugAndNumber(h.Context, chapterReq)
 	if err != nil {
-		h.Logger.Printf("Error getting chapter: %s", err)
+		h.Middlewares.Printf("Error getting chapter: %s", err)
 		return http.StatusNotFound, errors.New("chapter is not found")
 	}
 

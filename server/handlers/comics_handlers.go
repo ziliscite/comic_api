@@ -1,21 +1,19 @@
-package handlers
+package handler
 
 import (
 	"bookstore/database"
-	"bookstore/helpers"
-	"context"
+	"bookstore/utils/helpers"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gosimple/slug"
 	"net/http"
 )
 
 func (h *Handler) GetComics(w http.ResponseWriter, r *http.Request) (int, error) {
-	ctx := context.Background()
-
-	comics, err := h.Queries.GetComics(ctx)
+	comics, err := h.Queries.GetComics(h.Context)
 	if err != nil {
-		h.Logger.Printf("Error getting comics: %s", err)
+		h.Middlewares.Printf("Error getting comics: %s", err)
 		return http.StatusInternalServerError, err
 	}
 
@@ -32,17 +30,13 @@ func (h *Handler) GetComicBySlug(w http.ResponseWriter, r *http.Request) (int, e
 
 	comicSlug := r.PathValue("comic_slug")
 
-	ctx := context.Background()
-
-	comic, code, err := helpers.GetComicBySlugHelper(ctx, h.Queries, h.Logger, comicSlug)
+	comic, code, err := h.GetComicBySlugHelper(comicSlug)
 	if err != nil {
 		return code, err
 	}
 
-	// I figured that
-	// I guess it's okay if it's not found? Just make it an empty list or something
-	genres, _ := h.Queries.GetGenresByComicId(ctx, comic.ID)
-	chapters, _ := h.Queries.GetChaptersByComicID(ctx, &comic.ID)
+	genres, _ := h.Queries.GetGenresByComicId(h.Context, comic.ID)
+	chapters, _ := h.Queries.GetChaptersByComicID(h.Context, &comic.ID)
 
 	comicResp := ComicData{
 		Comic:    comic,
@@ -55,12 +49,10 @@ func (h *Handler) GetComicBySlug(w http.ResponseWriter, r *http.Request) (int, e
 }
 
 func (h *Handler) CreateComic(w http.ResponseWriter, r *http.Request) (int, error) {
-	ctx := context.Background()
-
 	comicParams := database.CreateComicParams{}
 	err := json.NewDecoder(r.Body).Decode(&comicParams)
 	if err != nil {
-		h.Logger.Printf("Error parsing request body: %s", err)
+		h.Middlewares.Printf("Error parsing request body: %s", err)
 		return http.StatusBadRequest, errors.New("invalid request body")
 	}
 
@@ -70,12 +62,27 @@ func (h *Handler) CreateComic(w http.ResponseWriter, r *http.Request) (int, erro
 	// Such length...
 	comicParams.Slug = comicSlugPtr
 
-	comic, err := h.Queries.CreateComic(ctx, comicParams)
+	comic, err := h.Queries.CreateComic(h.Context, comicParams)
 	if err != nil {
-		h.Logger.Printf("Error creating comic: %s", err)
+		h.Middlewares.Printf("Error creating comic: %s", err)
 		return http.StatusBadRequest, errors.New("error creating comic")
 	}
 
 	helpers.RespondWithJSON(w, http.StatusCreated, comic)
 	return http.StatusCreated, nil
+}
+
+func (h *Handler) GetComicBySlugHelper(comicSlug string) (*database.GetComicBySlugRow, int, error) {
+	if !slug.IsSlug(comicSlug) {
+		h.Middlewares.Printf("Invalid comic slug: %s", comicSlug)
+		return nil, http.StatusBadRequest, fmt.Errorf("invalid comic slug")
+	}
+
+	comic, err := h.Queries.GetComicBySlug(h.Context, &comicSlug)
+	if err != nil {
+		h.Middlewares.Printf("Comic with slug %s is not found: %s", comicSlug, err.Error())
+		return nil, http.StatusNotFound, fmt.Errorf("comic is not found")
+	}
+
+	return comic, http.StatusOK, nil
 }
