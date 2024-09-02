@@ -14,6 +14,25 @@ FROM
 ORDER BY
     name;
 
+-- Select author by name
+-- name: GetAuthorByName :one
+SELECT
+    id,
+    name
+FROM
+    authors
+WHERE
+    name = $1;
+
+-- Insert an author to a comic
+-- name: AuthorComic :exec
+INSERT INTO author_comic (
+    author_id,
+    comic_id
+) VALUES (
+    $1, $2
+);
+
 -- Select authors by comic id
 -- name: GetAuthorsByComicId :many
 SELECT
@@ -139,6 +158,14 @@ FROM
 ORDER BY
     genre_name;
 
+-- Add a new genre
+-- name: AddGenre :exec
+INSERT INTO genres (
+    genre_name
+) VALUES (
+    $1
+) RETURNING *;
+
 -- Select a genre by name
 -- name: GetGenreByName :one
 SELECT
@@ -211,9 +238,9 @@ ORDER BY
 -- Register User
 -- name: RegisterUser :one
 INSERT INTO users (
-    username, email, password, first_name, last_name, date_of_birth, role
+    username, email, password, first_name, last_name, date_of_birth, role, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6, $7, now(), now()
 ) RETURNING *;
 
 -- Login User
@@ -224,6 +251,15 @@ FROM
     users
 WHERE
     users.email = $1;
+
+-- Get User Role
+-- name: GetUserRole :one
+SELECT
+    user_id, username, email, role
+FROM
+    users
+WHERE
+    users.user_id = $1;
 
 -- Bookmark a comic
 -- name: BookmarkComic :exec
@@ -238,3 +274,27 @@ INSERT INTO bookmark (
 -- name: RemoveComicFromBookmark :exec
 DELETE FROM bookmark
 WHERE user_id = $1 AND comic_id = $2;
+
+-- Add a session
+-- name: AddSession :one
+INSERT INTO sessions (
+    user_id, session_token, created_at, expires_at, is_active
+) VALUES (
+    $1, $2, now(), $3, TRUE
+) RETURNING *;
+
+-- Get a session using token
+-- name: GetSessionFromToken :one
+SELECT
+    *
+FROM
+    sessions
+WHERE
+    session_token = $1;
+
+
+-- Revoke a session
+-- name: RevokeSession :exec
+UPDATE sessions
+SET is_active = FALSE
+WHERE session_id = $1;

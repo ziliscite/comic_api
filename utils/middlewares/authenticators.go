@@ -26,6 +26,7 @@ func (m *Middleware) EnsureAdminMiddleware(next http.Handler) http.Handler {
 
 func (m *Middleware) AuthenticateMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Maybe redirect to /refresh if token invalid?
 		claims, err := token_maker.ValidateToken(r)
 		if err != nil {
 			helpers.RespondWithError(w, http.StatusUnauthorized, err.Error())

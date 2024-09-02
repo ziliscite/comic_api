@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 	"unicode"
 )
 
@@ -46,13 +48,59 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
 		return http.StatusInternalServerError, errors.New("error generating access token_maker")
 	}
 
-	w.Header().Set("Authorization", "Bearer "+accessToken)
-	/*	http.SetCookie(w, &http.Cookie{
-		Name:  "access_token",
-		Value: accessToken,
-	})*/
+	refreshToken, err := token_maker.GenerateRefreshToken()
 
-	helpers.RespondWithMessage(w, http.StatusOK, "login successful")
+	sessionParams := database.AddSessionParams{
+		UserID:       &user.UserID,
+		SessionToken: refreshToken,
+		ExpiresAt: pgtype.Timestamp{
+			Valid: true,
+			Time:  time.Now().UTC().Add(60 * time.Hour),
+		},
+	}
+
+	session, err := h.Queries.AddSession(h.Context, sessionParams)
+	if err != nil {
+		h.Middlewares.Printf("Error adding session: %v", err)
+		return http.StatusInternalServerError, errors.New("error generating session")
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    session.SessionToken,
+		HttpOnly: true,
+		Path:     "/refresh",
+		Expires:  session.ExpiresAt.Time.UTC(),
+	})
+
+	w.Header().Set("Authorization", "Bearer "+accessToken)
+
+	type LoginResponse struct {
+		SessionId int32  `json:"session_id"`
+		Email     string `json:"email"`
+
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+
+		AccessTokenExpires  pgtype.Timestamp `json:"access_token_expires_at"`
+		RefreshTokenExpires pgtype.Timestamp `json:"refresh_token_expires_at"`
+	}
+
+	loginResp := LoginResponse{
+		SessionId: session.SessionID,
+		Email:     user.Email,
+
+		AccessToken: accessToken,
+		AccessTokenExpires: pgtype.Timestamp{
+			Valid: true,
+			Time:  time.Now().UTC().Add(2 * time.Hour),
+		},
+
+		RefreshToken:        refreshToken,
+		RefreshTokenExpires: session.ExpiresAt,
+	}
+
+	helpers.RespondWithJSON(w, http.StatusOK, loginResp)
 	return http.StatusOK, nil
 }
 
@@ -94,6 +142,102 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) (int, error) 
 
 	helpers.RespondWithJSON(w, http.StatusCreated, user)
 	return http.StatusCreated, nil
+}
+
+func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) (int, error) {
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			h.Middlewares.Printf("Refresh token not present %s", err.Error())
+			return http.StatusUnauthorized, errors.New("refresh token not found")
+		}
+
+		h.Middlewares.Printf("Error parsing refresh token: %s", err.Error())
+		return http.StatusInternalServerError, errors.New("something went wrong")
+	}
+
+	// Access the cookie value
+	tokenString := cookie.Value
+
+	refreshToken, err := h.Queries.GetSessionFromToken(h.Context, tokenString)
+	if err != nil {
+		h.Middlewares.Printf("Error getting session from token: %s", err.Error())
+		return http.StatusInternalServerError, errors.New("something went wrong")
+	}
+
+	if !refreshToken.ExpiresAt.Time.UTC().After(time.Now().UTC()) {
+		h.Middlewares.Printf("Refresh token expired")
+
+		err = h.Queries.RevokeSession(h.Context, refreshToken.SessionID)
+		if err != nil {
+			h.Middlewares.Printf("Error revoking session: %s", err.Error())
+			return http.StatusInternalServerError, errors.New("something went wrong")
+		}
+
+		return http.StatusUnauthorized, errors.New("refresh token expired")
+	}
+
+	userRole, err := h.Queries.GetUserRole(h.Context, *refreshToken.UserID)
+	if err != nil {
+		h.Middlewares.Printf("Error getting user role: %s", err.Error())
+		return http.StatusInternalServerError, errors.New("something went wrong")
+	}
+
+	accessToken, err := token_maker.GenerateJWT(strconv.Itoa(int(*refreshToken.UserID)), string(userRole.Role), h.JWTSecret)
+	if err != nil {
+		h.Middlewares.Printf("Error generating access token_maker: %v", err)
+		return http.StatusInternalServerError, errors.New("error generating access token_maker")
+	}
+
+	w.Header().Set("Authorization", "Bearer "+accessToken)
+
+	type RefreshResponse struct {
+		SessionId          int32            `json:"session_id"`
+		AccessToken        string           `json:"access_token"`
+		AccessTokenExpires pgtype.Timestamp `json:"access_token_expires_at"`
+	}
+
+	refreshResponse := RefreshResponse{
+		SessionId:   refreshToken.SessionID,
+		AccessToken: accessToken,
+		AccessTokenExpires: pgtype.Timestamp{
+			Valid: true,
+			Time:  time.Now().UTC().Add(2 * time.Hour),
+		},
+	}
+
+	helpers.RespondWithJSON(w, http.StatusOK, refreshResponse)
+	return http.StatusOK, nil
+}
+
+func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) (int, error) {
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			h.Middlewares.Printf("Refresh token not present %s", err.Error())
+			return http.StatusUnauthorized, errors.New("refresh token not found")
+		}
+
+		h.Middlewares.Printf("Error parsing refresh token: %s", err.Error())
+		return http.StatusInternalServerError, errors.New("something went wrong")
+	}
+
+	tokenString := cookie.Value
+
+	refreshToken, err := h.Queries.GetSessionFromToken(h.Context, tokenString)
+	if err != nil {
+		h.Middlewares.Printf("Error getting session from token: %s", err.Error())
+		return http.StatusInternalServerError, errors.New("something went wrong")
+	}
+
+	err = h.Queries.RevokeSession(h.Context, refreshToken.SessionID)
+	if err != nil {
+		h.Middlewares.Printf("Error revoking session: %s", err.Error())
+		return http.StatusInternalServerError, errors.New("something went wrong")
+	}
+
+	helpers.RespondWithMessage(w, http.StatusOK, "revoked successfully")
+	return http.StatusOK, nil
 }
 
 func handleUserError(logger *middlewares.Middleware, err error, email string, username string) (int, error) {

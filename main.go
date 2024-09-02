@@ -2,7 +2,7 @@ package main
 
 import (
 	"bookstore/server/handlers"
-	router2 "bookstore/server/routers"
+	router "bookstore/server/routers"
 	"github.com/joho/godotenv"
 	"log"
 	"net/http"
@@ -18,14 +18,14 @@ func main() {
 
 	err = runServer()
 	if err != nil {
-		log.Fatal("Something went wrong")
+		log.Fatalf("Something went wrong: %s", err.Error())
 	}
 }
 
 func runServer() error {
 	muxHandler := handler.NewHandler()
 
-	routers := router2.GetRouters(muxHandler)
+	routers := router.GetRouters(muxHandler)
 
 	muxServer := http.Server{
 		Addr:    muxHandler.ListenAddr,

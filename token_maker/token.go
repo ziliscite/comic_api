@@ -1,6 +1,8 @@
 package token_maker
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
@@ -26,7 +28,7 @@ func GenerateJWT(userId, role, secret string) (string, error) {
 			Subject: userId,
 			Issuer:  os.Getenv("ISSUER"),
 
-			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(3 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(2 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
 		},
 	}
@@ -77,4 +79,13 @@ func getBearerToken(r *http.Request) (string, error) {
 	// Extract the token_maker by trimming the "Bearer " prefix
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 	return token, nil
+}
+
+// GenerateRefreshToken generates a random refresh token
+func GenerateRefreshToken() (string, error) {
+	bytes := make([]byte, 128)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes), nil
 }

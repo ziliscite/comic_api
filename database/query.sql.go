@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addGenre = `-- name: AddGenre :exec
+INSERT INTO genres (
+    genre_name
+) VALUES (
+    $1
+) RETURNING id, genre_name
+`
+
+// Add a new genre
+func (q *Queries) AddGenre(ctx context.Context, genreName string) error {
+	_, err := q.db.Exec(ctx, addGenre, genreName)
+	return err
+}
+
 const addGenreToComic = `-- name: AddGenreToComic :exec
 INSERT INTO comic_genres (
     comic_id,
@@ -28,6 +42,55 @@ type AddGenreToComicParams struct {
 // Link a comic with a genre
 func (q *Queries) AddGenreToComic(ctx context.Context, arg AddGenreToComicParams) error {
 	_, err := q.db.Exec(ctx, addGenreToComic, arg.ComicID, arg.GenreID)
+	return err
+}
+
+const addSession = `-- name: AddSession :one
+INSERT INTO sessions (
+    user_id, session_token, created_at, expires_at, is_active
+) VALUES (
+    $1, $2, now(), $3, TRUE
+) RETURNING session_id, user_id, session_token, created_at, expires_at, is_active
+`
+
+type AddSessionParams struct {
+	UserID       *int32           `json:"user_id"`
+	SessionToken string           `json:"session_token"`
+	ExpiresAt    pgtype.Timestamp `json:"expires_at"`
+}
+
+// Add a session
+func (q *Queries) AddSession(ctx context.Context, arg AddSessionParams) (*Session, error) {
+	row := q.db.QueryRow(ctx, addSession, arg.UserID, arg.SessionToken, arg.ExpiresAt)
+	var i Session
+	err := row.Scan(
+		&i.SessionID,
+		&i.UserID,
+		&i.SessionToken,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.IsActive,
+	)
+	return &i, err
+}
+
+const authorComic = `-- name: AuthorComic :exec
+INSERT INTO author_comic (
+    author_id,
+    comic_id
+) VALUES (
+    $1, $2
+)
+`
+
+type AuthorComicParams struct {
+	AuthorID int32 `json:"author_id"`
+	ComicID  int32 `json:"comic_id"`
+}
+
+// Insert an author to a comic
+func (q *Queries) AuthorComic(ctx context.Context, arg AuthorComicParams) error {
+	_, err := q.db.Exec(ctx, authorComic, arg.AuthorID, arg.ComicID)
 	return err
 }
 
@@ -152,6 +215,24 @@ WHERE id = $1
 func (q *Queries) DeleteComic(ctx context.Context, id int32) error {
 	_, err := q.db.Exec(ctx, deleteComic, id)
 	return err
+}
+
+const getAuthorByName = `-- name: GetAuthorByName :one
+SELECT
+    id,
+    name
+FROM
+    authors
+WHERE
+    name = $1
+`
+
+// Select author by name
+func (q *Queries) GetAuthorByName(ctx context.Context, name string) (*Author, error) {
+	row := q.db.QueryRow(ctx, getAuthorByName, name)
+	var i Author
+	err := row.Scan(&i.ID, &i.Name)
+	return &i, err
 }
 
 const getAuthors = `-- name: GetAuthors :many
@@ -628,6 +709,59 @@ func (q *Queries) GetGenresByComicId(ctx context.Context, comicID int32) ([]*Gen
 	return items, nil
 }
 
+const getSessionFromToken = `-- name: GetSessionFromToken :one
+SELECT
+    session_id, user_id, session_token, created_at, expires_at, is_active
+FROM
+    sessions
+WHERE
+    session_token = $1
+`
+
+// Get a session using token
+func (q *Queries) GetSessionFromToken(ctx context.Context, sessionToken string) (*Session, error) {
+	row := q.db.QueryRow(ctx, getSessionFromToken, sessionToken)
+	var i Session
+	err := row.Scan(
+		&i.SessionID,
+		&i.UserID,
+		&i.SessionToken,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.IsActive,
+	)
+	return &i, err
+}
+
+const getUserRole = `-- name: GetUserRole :one
+SELECT
+    user_id, username, email, role
+FROM
+    users
+WHERE
+    users.user_id = $1
+`
+
+type GetUserRoleRow struct {
+	UserID   int32    `json:"user_id"`
+	Username string   `json:"username"`
+	Email    string   `json:"email"`
+	Role     UserRole `json:"role"`
+}
+
+// Get User Role
+func (q *Queries) GetUserRole(ctx context.Context, userID int32) (*GetUserRoleRow, error) {
+	row := q.db.QueryRow(ctx, getUserRole, userID)
+	var i GetUserRoleRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.Email,
+		&i.Role,
+	)
+	return &i, err
+}
+
 const loginWithEmail = `-- name: LoginWithEmail :one
 SELECT
     user_id, username, email, password, first_name, last_name, date_of_birth, role
@@ -665,11 +799,11 @@ func (q *Queries) LoginWithEmail(ctx context.Context, email string) (*LoginWithE
 	return &i, err
 }
 
-const registerUser = `-- name: Register :one
+const registerUser = `-- name: RegisterUser :one
 INSERT INTO users (
-    username, email, password, first_name, last_name, date_of_birth, role
+    username, email, password, first_name, last_name, date_of_birth, role, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6, $7, now(), now()
 ) RETURNING user_id, username, email, password, first_name, last_name, date_of_birth, role, created_at, updated_at
 `
 
@@ -739,6 +873,18 @@ type RemoveGenreFromComicParams struct {
 // Remove a genre from a comic
 func (q *Queries) RemoveGenreFromComic(ctx context.Context, arg RemoveGenreFromComicParams) error {
 	_, err := q.db.Exec(ctx, removeGenreFromComic, arg.ComicID, arg.GenreID)
+	return err
+}
+
+const revokeSession = `-- name: RevokeSession :exec
+UPDATE sessions
+SET is_active = FALSE
+WHERE session_id = $1
+`
+
+// Revoke a session
+func (q *Queries) RevokeSession(ctx context.Context, sessionID int32) error {
+	_, err := q.db.Exec(ctx, revokeSession, sessionID)
 	return err
 }
 

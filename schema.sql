@@ -77,8 +77,8 @@ CREATE TABLE bookmark (
 
 CREATE TABLE sessions (
     session_id SERIAL PRIMARY KEY,  -- Unique identifier for each session
-    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,  -- Foreign key referencing the user_id in the users table
-    session_token VARCHAR(255) UNIQUE NOT NULL,  -- Unique session token_maker
+    user_id INT REFERENCES users(user_id) ON DELETE CASCADE, -- Foreign key referencing the user_id in the users table
+    session_token VARCHAR(512) UNIQUE NOT NULL,  -- Unique session token_maker
     created_at TIMESTAMP DEFAULT NOW(),  -- Timestamp when the session was created
     expires_at TIMESTAMP NOT NULL,  -- Timestamp when the session expires
     is_active BOOLEAN DEFAULT TRUE  -- Status to indicate if the session is currently active

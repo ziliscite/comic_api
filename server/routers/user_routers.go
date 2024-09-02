@@ -10,5 +10,7 @@ func UserRouters(h *server.Handler) http.Handler {
 	userRouter := http.NewServeMux()
 
 	userRouter.Handle("POST /bookmark/{comic_slug}", helpers.ServeHandler(h.AddComicBookmark))
+	userRouter.Handle("DELETE /bookmark/{comic_slug}", helpers.ServeHandler(h.RemoveComicBookmark))
+
 	return userRouter
 }

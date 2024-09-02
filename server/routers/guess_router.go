@@ -28,8 +28,14 @@ func GuessRouter(muxHandler *handler.Handler) *http.ServeMux {
 
 	guessRouter.Handle("GET /comics/{comic_slug}/chapters/{chapter_number}", helpers.ServeHandler(muxHandler.GetChapterByNumber))
 
+	guessRouter.Handle("GET /authors", helpers.ServeHandler(muxHandler.GetAuthors))
+
 	guessRouter.Handle("POST /register", helpers.ServeHandler(muxHandler.Register))
 	guessRouter.Handle("POST /login", helpers.ServeHandler(muxHandler.Login))
+
+	// I guess technically we have to be verified or something
+	guessRouter.Handle("POST /refresh", helpers.ServeHandler(muxHandler.Refresh))
+	guessRouter.Handle("DELETE /revoke", helpers.ServeHandler(muxHandler.Revoke))
 
 	return guessRouter
 }
