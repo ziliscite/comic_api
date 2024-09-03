@@ -29,7 +29,8 @@ func (m *Middleware) AuthenticateMiddleware(next http.Handler) http.Handler {
 		// Maybe redirect to /refresh if token invalid?
 		claims, err := token_maker.ValidateToken(r)
 		if err != nil {
-			helpers.RespondWithError(w, http.StatusUnauthorized, err.Error())
+			m.Printf("error validating token: %v", err)
+			helpers.RespondWithError(w, http.StatusUnauthorized, "not authorized")
 			return
 		}
 

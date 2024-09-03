@@ -45,7 +45,17 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
 	accessToken, err := token_maker.GenerateJWT(strconv.Itoa(int(user.UserID)), string(user.Role), h.JWTSecret)
 	if err != nil {
 		h.Middlewares.Printf("Error generating access token_maker: %v", err)
-		return http.StatusInternalServerError, errors.New("error generating access token_maker")
+		return http.StatusInternalServerError, errors.New("error getting session")
+	}
+
+	pastSession, err := h.Queries.GetSessionFromUserId(h.Context, &user.UserID)
+	if err != nil {
+		return http.StatusInternalServerError, errors.New("error getting session")
+	}
+
+	err = h.Queries.RevokeSession(h.Context, pastSession.SessionID)
+	if err != nil {
+		return http.StatusInternalServerError, errors.New("error getting session")
 	}
 
 	refreshToken, err := token_maker.GenerateRefreshToken()
@@ -62,7 +72,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
 	session, err := h.Queries.AddSession(h.Context, sessionParams)
 	if err != nil {
 		h.Middlewares.Printf("Error adding session: %v", err)
-		return http.StatusInternalServerError, errors.New("error generating session")
+		return http.StatusInternalServerError, errors.New("error getting session")
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -145,24 +155,14 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) (int, error) 
 }
 
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) (int, error) {
-	cookie, err := r.Cookie("refresh_token")
+	refreshToken, code, err := h.getSession(r)
 	if err != nil {
-		if errors.Is(err, http.ErrNoCookie) {
-			h.Middlewares.Printf("Refresh token not present %s", err.Error())
-			return http.StatusUnauthorized, errors.New("refresh token not found")
-		}
-
-		h.Middlewares.Printf("Error parsing refresh token: %s", err.Error())
-		return http.StatusInternalServerError, errors.New("something went wrong")
+		return code, err
 	}
 
-	// Access the cookie value
-	tokenString := cookie.Value
-
-	refreshToken, err := h.Queries.GetSessionFromToken(h.Context, tokenString)
-	if err != nil {
-		h.Middlewares.Printf("Error getting session from token: %s", err.Error())
-		return http.StatusInternalServerError, errors.New("something went wrong")
+	if !*refreshToken.IsActive {
+		h.Middlewares.Printf("Refresh token expired")
+		return http.StatusUnauthorized, errors.New("not authorized")
 	}
 
 	if !refreshToken.ExpiresAt.Time.UTC().After(time.Now().UTC()) {
@@ -174,7 +174,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) (int, error) {
 			return http.StatusInternalServerError, errors.New("something went wrong")
 		}
 
-		return http.StatusUnauthorized, errors.New("refresh token expired")
+		return http.StatusUnauthorized, errors.New("not authorized")
 	}
 
 	userRole, err := h.Queries.GetUserRole(h.Context, *refreshToken.UserID)
@@ -211,23 +211,9 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) (int, error) {
 }
 
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) (int, error) {
-	cookie, err := r.Cookie("refresh_token")
+	refreshToken, code, err := h.getSession(r)
 	if err != nil {
-		if errors.Is(err, http.ErrNoCookie) {
-			h.Middlewares.Printf("Refresh token not present %s", err.Error())
-			return http.StatusUnauthorized, errors.New("refresh token not found")
-		}
-
-		h.Middlewares.Printf("Error parsing refresh token: %s", err.Error())
-		return http.StatusInternalServerError, errors.New("something went wrong")
-	}
-
-	tokenString := cookie.Value
-
-	refreshToken, err := h.Queries.GetSessionFromToken(h.Context, tokenString)
-	if err != nil {
-		h.Middlewares.Printf("Error getting session from token: %s", err.Error())
-		return http.StatusInternalServerError, errors.New("something went wrong")
+		return code, err
 	}
 
 	err = h.Queries.RevokeSession(h.Context, refreshToken.SessionID)
@@ -238,6 +224,29 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) (int, error) {
 
 	helpers.RespondWithMessage(w, http.StatusOK, "revoked successfully")
 	return http.StatusOK, nil
+}
+
+func (h *Handler) getSession(r *http.Request) (*database.Session, int, error) {
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			h.Middlewares.Printf("Refresh token not present %s", err.Error())
+			return nil, http.StatusUnauthorized, errors.New("not authorized")
+		}
+
+		h.Middlewares.Printf("Error parsing refresh token: %s", err.Error())
+		return nil, http.StatusInternalServerError, errors.New("something went wrong")
+	}
+
+	tokenString := cookie.Value
+
+	refreshToken, err := h.Queries.GetSessionFromToken(h.Context, tokenString)
+	if err != nil {
+		h.Middlewares.Printf("Error getting session from token: %s", err.Error())
+		return nil, http.StatusInternalServerError, errors.New("something went wrong")
+	}
+
+	return refreshToken, http.StatusOK, nil
 }
 
 func handleUserError(logger *middlewares.Middleware, err error, email string, username string) (int, error) {

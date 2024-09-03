@@ -292,6 +292,14 @@ FROM
 WHERE
     session_token = $1;
 
+-- Get a session using user id
+-- name: GetSessionFromUserId :one
+SELECT
+    *
+FROM
+    sessions
+WHERE
+    user_id = $1;
 
 -- Revoke a session
 -- name: RevokeSession :exec

@@ -35,7 +35,7 @@ func GuessRouter(muxHandler *handler.Handler) *http.ServeMux {
 
 	// I guess technically we have to be verified or something
 	guessRouter.Handle("POST /refresh", helpers.ServeHandler(muxHandler.Refresh))
-	guessRouter.Handle("DELETE /revoke", helpers.ServeHandler(muxHandler.Revoke))
+	guessRouter.Handle("POST /revoke", helpers.ServeHandler(muxHandler.Revoke))
 
 	return guessRouter
 }

@@ -733,6 +733,30 @@ func (q *Queries) GetSessionFromToken(ctx context.Context, sessionToken string) 
 	return &i, err
 }
 
+const getSessionFromUserId = `-- name: GetSessionFromUserId :one
+SELECT
+    session_id, user_id, session_token, created_at, expires_at, is_active
+FROM
+    sessions
+WHERE
+    user_id = $1
+`
+
+// Get a session using user id
+func (q *Queries) GetSessionFromUserId(ctx context.Context, userID *int32) (*Session, error) {
+	row := q.db.QueryRow(ctx, getSessionFromUserId, userID)
+	var i Session
+	err := row.Scan(
+		&i.SessionID,
+		&i.UserID,
+		&i.SessionToken,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.IsActive,
+	)
+	return &i, err
+}
+
 const getUserRole = `-- name: GetUserRole :one
 SELECT
     user_id, username, email, role
