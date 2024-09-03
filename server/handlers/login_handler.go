@@ -7,6 +7,7 @@ import (
 	"bookstore/utils/middlewares"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
@@ -48,14 +49,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
 		return http.StatusInternalServerError, errors.New("error getting session")
 	}
 
-	pastSession, err := h.Queries.GetSessionFromUserId(h.Context, &user.UserID)
-	if err != nil {
-		return http.StatusInternalServerError, errors.New("error getting session")
-	}
-
-	err = h.Queries.RevokeSession(h.Context, pastSession.SessionID)
-	if err != nil {
-		return http.StatusInternalServerError, errors.New("error getting session")
+	pastSession, _ := h.Queries.GetSessionFromUserId(h.Context, &user.UserID)
+	if pastSession != nil {
+		err = h.Queries.RevokeSession(h.Context, pastSession.SessionID)
+		if err != nil {
+			return http.StatusInternalServerError, errors.New("error getting session")
+		}
 	}
 
 	refreshToken, err := token_maker.GenerateRefreshToken()
@@ -154,6 +153,122 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) (int, error) 
 	return http.StatusCreated, nil
 }
 
+func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, error) {
+	claims, ok := r.Context().Value(token_maker.ClaimsKey).(*token_maker.CustomClaims)
+	if !ok {
+		return http.StatusUnauthorized, errors.New("not authorized")
+	}
+
+	userId, err := strconv.Atoi(claims.Subject)
+	if err != nil {
+		return http.StatusBadRequest, errors.New("invalid user id")
+	}
+
+	user, err := h.Queries.GetUserById(h.Context, int32(userId))
+	if err != nil {
+		return http.StatusNotFound, errors.New("user not found")
+	}
+
+	// Changing password or/and email require different handler and router
+	userReq := database.UpdateUserParams{
+		UserID:      user.UserID,
+		Username:    user.Username,
+		FirstName:   user.FirstName,
+		LastName:    user.LastName,
+		DateOfBirth: user.DateOfBirth,
+	}
+
+	err = json.NewDecoder(r.Body).Decode(&userReq)
+	if err != nil {
+		h.Middlewares.Printf("Error parsing request body: %s", err)
+		return http.StatusBadRequest, errors.New("invalid request body")
+	}
+
+	updatedUser, err := h.Queries.UpdateUser(h.Context, userReq)
+	if err != nil {
+		userError, err := handleUserError(h.Middlewares, err, user.Email, userReq.Username)
+		if err != nil {
+			return http.StatusInternalServerError, errors.New("error updating user")
+		}
+
+		return userError, err
+	}
+
+	helpers.RespondWithMessage(w, http.StatusOK, fmt.Sprintf("user %s has been updated", updatedUser.Username))
+	return http.StatusOK, nil
+}
+
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, error) {
+	type ChangePasswordParams struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+
+	claims, ok := r.Context().Value(token_maker.ClaimsKey).(*token_maker.CustomClaims)
+	if !ok {
+		return http.StatusUnauthorized, errors.New("not authorized")
+	}
+
+	userId, err := strconv.Atoi(claims.Subject)
+	if err != nil {
+		return http.StatusBadRequest, errors.New("invalid user id")
+	}
+
+	user, err := h.Queries.GetUserById(h.Context, int32(userId))
+	if err != nil {
+		return http.StatusNotFound, errors.New("user not found")
+	}
+
+	userReq := ChangePasswordParams{}
+	err = json.NewDecoder(r.Body).Decode(&userReq)
+	if err != nil {
+		h.Middlewares.Printf("Error parsing request body: %s", err)
+		return http.StatusBadRequest, errors.New("invalid request body")
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(userReq.OldPassword))
+	if err != nil {
+		h.Middlewares.Printf("Password does not match: %v", err)
+		return http.StatusUnauthorized, errors.New("password does not match")
+	}
+
+	err = validatePassword(userReq.NewPassword)
+	if err != nil {
+		h.Middlewares.Printf("Error validating password: %s", err)
+		return http.StatusBadRequest, errors.New("invalid request body")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(userReq.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		h.Middlewares.Printf("Error hashing password: %s", err)
+		return http.StatusBadRequest, errors.New("error hashing password")
+	}
+
+	userPass := database.UpdateUserPasswordParams{
+		UserID:   user.UserID,
+		Password: string(hashedPassword),
+	}
+
+	err = h.Queries.UpdateUserPassword(h.Context, userPass)
+	if err != nil {
+		h.Middlewares.Printf("Error updating user password: %s", err)
+		return http.StatusInternalServerError, errors.New("error updating user password")
+	}
+	// Probably match what the first password was?
+	// Like, prev_pass, new_pass json?
+	// And we send email about code and shit
+	// probably cool, idk
+
+	helpers.RespondWithMessage(w, http.StatusOK, "password updated")
+	return http.StatusOK, nil
+}
+
+func (h *Handler) ChangeEmail(w http.ResponseWriter, r *http.Request) (int, error) {
+	// What if, we send email when, like, registering and updating email?
+	// Also password, yeah, we can send some kind of verification code
+	return http.StatusOK, nil
+}
+
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) (int, error) {
 	refreshToken, code, err := h.getSession(r)
 	if err != nil {
@@ -177,7 +292,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) (int, error) {
 		return http.StatusUnauthorized, errors.New("not authorized")
 	}
 
-	userRole, err := h.Queries.GetUserRole(h.Context, *refreshToken.UserID)
+	userRole, err := h.Queries.GetUserById(h.Context, *refreshToken.UserID)
 	if err != nil {
 		h.Middlewares.Printf("Error getting user role: %s", err.Error())
 		return http.StatusInternalServerError, errors.New("something went wrong")

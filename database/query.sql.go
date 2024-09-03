@@ -757,30 +757,38 @@ func (q *Queries) GetSessionFromUserId(ctx context.Context, userID *int32) (*Ses
 	return &i, err
 }
 
-const getUserRole = `-- name: GetUserRole :one
+const getUserById = `-- name: GetUserById :one
 SELECT
-    user_id, username, email, role
+    user_id, username, email, password, first_name, last_name, date_of_birth, role
 FROM
     users
 WHERE
     users.user_id = $1
 `
 
-type GetUserRoleRow struct {
-	UserID   int32    `json:"user_id"`
-	Username string   `json:"username"`
-	Email    string   `json:"email"`
-	Role     UserRole `json:"role"`
+type GetUserByIdRow struct {
+	UserID      int32       `json:"user_id"`
+	Username    string      `json:"username"`
+	Email       string      `json:"email"`
+	Password    string      `json:"password"`
+	FirstName   *string     `json:"first_name"`
+	LastName    *string     `json:"last_name"`
+	DateOfBirth pgtype.Date `json:"date_of_birth"`
+	Role        UserRole    `json:"role"`
 }
 
-// Get User Role
-func (q *Queries) GetUserRole(ctx context.Context, userID int32) (*GetUserRoleRow, error) {
-	row := q.db.QueryRow(ctx, getUserRole, userID)
-	var i GetUserRoleRow
+// Get User
+func (q *Queries) GetUserById(ctx context.Context, userID int32) (*GetUserByIdRow, error) {
+	row := q.db.QueryRow(ctx, getUserById, userID)
+	var i GetUserByIdRow
 	err := row.Scan(
 		&i.UserID,
 		&i.Username,
 		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.DateOfBirth,
 		&i.Role,
 	)
 	return &i, err
@@ -926,5 +934,69 @@ type UpdateComicStatusParams struct {
 // Update comic status
 func (q *Queries) UpdateComicStatus(ctx context.Context, arg UpdateComicStatusParams) error {
 	_, err := q.db.Exec(ctx, updateComicStatus, arg.ID, arg.Status)
+	return err
+}
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users
+SET
+    username = $2,
+    first_name = $3,
+    last_name = $4,
+    date_of_birth = $5,
+    updated_at = now()
+WHERE user_id = $1
+RETURNING user_id, username, email, password, first_name, last_name, date_of_birth, role, created_at, updated_at
+`
+
+type UpdateUserParams struct {
+	UserID      int32       `json:"user_id"`
+	Username    string      `json:"username"`
+	FirstName   *string     `json:"first_name"`
+	LastName    *string     `json:"last_name"`
+	DateOfBirth pgtype.Date `json:"date_of_birth"`
+}
+
+// Update User
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (*User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.UserID,
+		arg.Username,
+		arg.FirstName,
+		arg.LastName,
+		arg.DateOfBirth,
+	)
+	var i User
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.DateOfBirth,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE users
+SET
+    password = $2,
+    updated_at = now()
+WHERE user_id = $1
+`
+
+type UpdateUserPasswordParams struct {
+	UserID   int32  `json:"user_id"`
+	Password string `json:"password"`
+}
+
+// Update User
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, arg.UserID, arg.Password)
 	return err
 }

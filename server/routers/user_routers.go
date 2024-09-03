@@ -12,5 +12,7 @@ func UserRouters(h *server.Handler) http.Handler {
 	userRouter.Handle("POST /bookmark/{comic_slug}", helpers.ServeHandler(h.AddComicBookmark))
 	userRouter.Handle("DELETE /bookmark/{comic_slug}", helpers.ServeHandler(h.RemoveComicBookmark))
 
+	userRouter.Handle("PUT /update_profile", helpers.ServeHandler(h.UpdateUser))
+
 	return userRouter
 }

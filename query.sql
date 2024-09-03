@@ -252,14 +252,34 @@ FROM
 WHERE
     users.email = $1;
 
--- Get User Role
--- name: GetUserRole :one
+-- Get User
+-- name: GetUserById :one
 SELECT
-    user_id, username, email, role
+    user_id, username, email, password, first_name, last_name, date_of_birth, role
 FROM
     users
 WHERE
     users.user_id = $1;
+
+-- Update User
+-- name: UpdateUser :one
+UPDATE users
+SET
+    username = $2,
+    first_name = $3,
+    last_name = $4,
+    date_of_birth = $5,
+    updated_at = now()
+WHERE user_id = $1
+RETURNING *;
+
+-- Update User
+-- name: UpdateUserPassword :exec
+UPDATE users
+SET
+    password = $2,
+    updated_at = now()
+WHERE user_id = $1;
 
 -- Bookmark a comic
 -- name: BookmarkComic :exec
